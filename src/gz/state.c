@@ -1275,6 +1275,8 @@ void load_state(const struct state_meta *state)
     }
   }
   serial_read(&p, &z64_play_ovl_ptr, sizeof(z64_play_ovl_ptr));
+  if (state->state_version < 0x0005)
+      p += (sizeof(z64_play_ovl_t) - sizeof(z64_play_ovl_ptr));
   /* particle overlays */
   n_ent = sizeof(z64_part_ovl_tab) / sizeof(*z64_part_ovl_tab);
   serial_read(&p, &next_ent, sizeof(next_ent));

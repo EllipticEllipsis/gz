@@ -304,8 +304,11 @@ static int objects_draw_proc(struct menu_item *item,
   gfx_printf(font, x, y + ch * 1, "allocated %08" PRIx32, p - s);
   gfx_printf(font, x, y + ch * 2, "available %08" PRIx32, e - p);
   gfx_printf(font, x, y + ch * 3, "total     %08" PRIx32, e - s);
+  gfx_printf(font, x, y + ch * 5, "address  id");
   for (int i = 0; i < z64_game.obj_ctxt.n_objects; ++i) {
-    gfx_printf(font, x + cw * (i % 2) * 16, y + ch * (i / 2 + 5),
+    if (i == 1)
+      gfx_printf(font, x + ch * 16, y + ch * 5, "address  id");
+    gfx_printf(font, x + cw * (i % 2) * 16, y + ch * (i / 2 + 6),
                "%08" PRIx32 " %04" PRIx16,
                z64_game.obj_ctxt.objects[i].data,
                z64_game.obj_ctxt.objects[i].id);
@@ -347,8 +350,10 @@ static int actor_draw_proc(struct menu_item *item,
                            struct menu_draw_params *draw_params)
 {
   struct actor_debug_info *adi = item->data;
-  int x = draw_params->x;
-  int y = draw_params->y;
+  int x_base = draw_params->x;
+  int y_base = draw_params->y;
+  int x = x_base;
+  int y = y_base;
   struct gfx_font *font = draw_params->font;
   uint32_t color = draw_params->color;
   uint8_t alpha = draw_params->alpha;
@@ -362,14 +367,35 @@ static int actor_draw_proc(struct menu_item *item,
     else
       adi->index = 0;
   }
-  gfx_printf(font, x + cw * 14, y, "%i / %i", adi->index, max);
+  y += ch;
+  gfx_printf(font, x + cw * (14 + 2), y, "%i / %i", adi->index, max);
   if (adi->index < max) {
     z64_actor_t *actor = z64_game.actor_list[adi->type].first;
     for (int i = 0; i < adi->index; ++i)
       actor = actor->next;
+
+    x += cw * (10 + 2);
+    y += ch;
+    gfx_printf(font, x, y,  "%04" PRIx16, actor->actor_id);
+    y += ch;
+    gfx_printf(font, x, y, "%04" PRIx16, actor->variable);
     sprintf(adi->edit_item->text, "%08" PRIx32, (uint32_t)actor);
-    gfx_printf(font, x + cw * 10, y + ch * 1, "%04" PRIx16, actor->actor_id);
-    gfx_printf(font, x, y + ch * 2, "variable  %04" PRIx16, actor->variable);
+    y += ch * 2;
+
+    switch (actor->actor_id) {
+      case 0: // Player
+        gfx_printf(font, x, y, "%08" PRIx32, z64_play_ovl_ptr->ptr);
+        break;
+
+      case 0x15: // EnItem00
+      case 0x39: // EnAObj
+        gfx_printf(font, x, y, "<n/a>");
+        break;
+
+      default:
+        gfx_printf(font, x, y, "%08" PRIx32, (uint32_t)actor->code_entry->ptr);
+        break;
+    }
 
     {
       Mtx m;
@@ -604,16 +630,20 @@ struct menu *gz_debug_menu(void)
   objects.selector = menu_add_submenu(&objects, 0, 0, NULL, "return");
   menu_add_static(&objects, 0, 1, "object id", 0xC0C0C0);
   item = menu_add_intinput(&objects, 10, 1, 16, 4, NULL, NULL);
-  menu_add_button(&objects, 16, 1, "push", push_object_proc, item);
-  menu_add_button(&objects, 22, 1, "pop", pop_object_proc, NULL);
+  menu_add_button(&objects, 16, 1, "add", push_object_proc, item);
+  menu_add_button(&objects, 16, 2, "remove last", pop_object_proc, NULL);
   menu_add_static_custom(&objects, 0, 3, objects_draw_proc, NULL, 0xC0C0C0);
 
   /* populate actors menu */
-  actors.selector = menu_add_submenu(&actors, 0, 0, NULL, "return");
+  int menu_row = 0;
+  int menu_col0 = 0;
+  actors.selector = menu_add_submenu(&actors, menu_col0, menu_row, NULL, "return");
   /* actor debug controls */
   static struct actor_debug_info adi;
-  menu_add_static(&actors, 0, 1, "type", 0xC0C0C0);
-  menu_add_option(&actors, 10, 1,
+  menu_col0 += 2;
+  menu_add_static(&actors, menu_col0 - 2, ++menu_row, "loaded", 0xC0C0C0);
+  menu_add_static(&actors, menu_col0, ++menu_row, "category", 0xC0C0C0);
+  menu_add_option(&actors, menu_col0 + 10, menu_row,
                   "switch\0""prop (1)\0""player\0""bomb\0""npc\0"
                   "enemy\0""prop (2)\0""item/action\0""misc\0""boss\0"
                   "door\0""chest\0",
@@ -621,38 +651,52 @@ struct menu *gz_debug_menu(void)
   item = menu_add_static_custom(&actors, 0, 2, actor_draw_proc,
                                 NULL, 0xC0C0C0);
   item->data = &adi;
-  menu_add_static(&actors, 0, 2, "index", 0xC0C0C0);
-  menu_add_button(&actors, 10, 2, "<", actor_index_dec_proc, &adi);
-  menu_add_button(&actors, 12, 2, ">", actor_index_inc_proc, &adi);
-  item = menu_add_button(&actors, 0, 3, NULL, &edit_actor_proc, &adi);
+  menu_add_static(&actors, menu_col0, ++menu_row, "index", 0xC0C0C0);
+  menu_add_button(&actors, menu_col0 + 10, menu_row, "<", actor_index_dec_proc, &adi);
+  menu_add_button(&actors, menu_col0 + 12, menu_row, ">", actor_index_inc_proc, &adi);
+
+  menu_add_static(&actors, menu_col0, ++menu_row, "actor id", 0xC0C0C0);
+  menu_add_static(&actors, menu_col0, ++menu_row, "params", 0xC0C0C0);
+  menu_add_static(&actors, menu_col0, ++menu_row, "instance", 0xC0C0C0);
+  item = menu_add_button(&actors, menu_col0 + 10, menu_row, NULL, &edit_actor_proc, &adi);
   item->text = malloc(9);
   item->text[0] = 0;
   adi.edit_item = item;
-  menu_add_button(&actors, 0, 5, "kill", &kill_actor_proc, &adi);
-  menu_add_button(&actors, 10, 5, "go to", &goto_actor_proc, &adi);
-  menu_add_button(&actors, 17, 5, "cull zone", &toggle_cullzone_proc, &adi);
+  menu_add_static(&actors, menu_col0, ++menu_row, "overlay", 0xC0C0C0);
+  menu_row = 3;
+  menu_add_button(&actors, menu_col0 + 22, ++menu_row, "kill", &kill_actor_proc, &adi);
+  menu_add_button(&actors, menu_col0 + 22, ++menu_row, "go to", &goto_actor_proc, &adi);
+  menu_add_button(&actors, menu_col0 + 22, ++menu_row, "cull zone", &toggle_cullzone_proc, &adi);
   /* actor spawn controls */
   static struct actor_spawn_info asi;
-  menu_add_static(&actors, 0, 7, "actor id", 0xC0C0C0);
-  menu_add_intinput(&actors, 10, 7, 16, 4, halfword_mod_proc, &asi.actor_no);
-  menu_add_static(&actors, 0, 8, "variable", 0xC0C0C0);
-  menu_add_intinput(&actors, 10, 8, 16, 4, halfword_mod_proc, &asi.variable);
-  menu_add_static(&actors, 0, 9, "position", 0xC0C0C0);
-  menu_add_intinput(&actors, 10, 9, -10, 6, word_mod_proc, &asi.x);
-  menu_add_intinput(&actors, 17, 9, -10, 6, word_mod_proc, &asi.y);
-  menu_add_intinput(&actors, 24, 9, -10, 6, word_mod_proc, &asi.z);
-  menu_add_static(&actors, 0, 10, "rotation", 0xC0C0C0);
-  menu_add_intinput(&actors, 10, 10, 10, 5, halfword_mod_proc, &asi.rx);
-  menu_add_intinput(&actors, 17, 10, 10, 5, halfword_mod_proc, &asi.ry);
-  menu_add_intinput(&actors, 24, 10, 10, 5, halfword_mod_proc, &asi.rz);
+  menu_row += 3;
+  menu_add_static(&actors, menu_col0 - 2, menu_row, "new", 0xC0C0C0);
+  menu_add_static(&actors, menu_col0, ++menu_row, "actor id", 0xC0C0C0);
+  menu_add_intinput(&actors, menu_col0 + 10, menu_row, 16, 4, halfword_mod_proc, &asi.actor_no);
+
+  menu_add_static(&actors, menu_col0, ++menu_row, "params", 0xC0C0C0);
+  menu_add_intinput(&actors, menu_col0 + 10, menu_row, 16, 4, halfword_mod_proc, &asi.variable);
+  
+  menu_add_static(&actors, menu_col0, ++menu_row, "position", 0xC0C0C0);
+  menu_add_intinput(&actors, menu_col0 + 10, menu_row, -10, 6, word_mod_proc, &asi.x);
+  menu_add_intinput(&actors, menu_col0 + 17, menu_row, -10, 6, word_mod_proc, &asi.y);
+  menu_add_intinput(&actors, menu_col0 + 24, menu_row, -10, 6, word_mod_proc, &asi.z);
+  
+  menu_add_static(&actors,   menu_col0,  ++menu_row, "rotation", 0xC0C0C0);
+  menu_add_intinput(&actors, menu_col0 + 10, menu_row, 10, 5, halfword_mod_proc, &asi.rx);
+  menu_add_intinput(&actors, menu_col0 + 17, menu_row, 10, 5, halfword_mod_proc, &asi.ry);
+  menu_add_intinput(&actors, menu_col0 + 24, menu_row, 10, 5, halfword_mod_proc, &asi.rz);
+  
   static struct actor_info ai;
   ai.adi = &adi;
   ai.asi = &asi;
-  menu_add_button(&actors, 0, 11, "spawn",spawn_actor_proc , &asi);
-  menu_add_button(&actors, 10, 11, "spawn as child",
+  menu_add_button(&actors, menu_col0 + 10, ++menu_row, "fetch from Link",
+                  fetch_actor_info_proc, &asi);
+  menu_add_button(&actors, menu_col0, menu_row, "spawn",spawn_actor_proc , &asi);
+  menu_add_button(&actors, menu_col0, ++menu_row, "spawn as child",
                   spawn_actor_attached_b_proc, &ai);
-  menu_add_button(&actors, 0, 12, "fetch from link",
-                  &fetch_actor_info_proc, &asi);
+
+  // menu_add_checkbox(&actors, menu_col0, ++menu_row, );
 
   /* create flags menu */
   flag_menu_create(&flags);

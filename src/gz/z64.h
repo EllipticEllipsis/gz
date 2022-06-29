@@ -987,7 +987,7 @@ struct z64_actor_s
   void             *dtor;                     /* 0x012C */
   void             *main_proc;                /* 0x0130 */
   void             *draw_proc;                /* 0x0134 */
-  void             *code_entry;               /* 0x0138 */
+  z64_actor_ovl_t  *code_entry;               /* 0x0138 */
                                               /* 0x013C */
 };
 
@@ -2236,7 +2236,7 @@ z64_extern  z64_scene_config_t    z64_scene_config_table[];
 z64_extern  int32_t               z64_letterbox_target;
 z64_extern  int32_t               z64_letterbox_current;
 z64_extern  z64_play_ovl_t        z64_play_ovl_tab[2];
-z64_extern  z64_play_ovl_t        z64_play_ovl_ptr;
+z64_extern  z64_play_ovl_t*       z64_play_ovl_ptr;
 z64_extern  char                  z64_sound_state[];
 z64_extern  z64_night_sfx_t       z64_night_sfx[20];
 z64_extern  char                  z64_ocarina_state[];
